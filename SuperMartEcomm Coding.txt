@@ -1,0 +1,57 @@
+package com.SuperMart.www
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.Logging
+import org.apache.spark.sql.SQLContext
+import java.io.FileNotFoundException
+
+object superMart{
+  def main(args:Array[String]):Unit={
+    val conf=new org.apche.spark.SparkConf().setMaster("local[*]").setAppName("SuuperMart")
+    val sc = new org.apache.spark.sql.SparkContext(conf)
+    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+    val ssc = new org.apache.spark.streaming.StreamingContext(sc,Seconds(5))
+    sc.setLogLevel("ERROR")
+	
+    sqlContext.sql("use jitender_db")
+
+	try {
+	  //Assuming data is coming in the form of file in certain Streaming directory "/user/spark_stream/jitender"
+	  //Example data (123,20180924010101,999,1)
+      val OrdDstream = ssc.textFileStream("/user/spark_stream/jitender")
+      case class Ord(Custid:Int,TS:Timestamp,Prodid:Int,Qty:Int)
+      val ActOrd = OrdDstream.map(line => line.split(",")).map(c => Ord(c(0).toInt,c(1).toTimestamp,c(2).toInt,c(3).toInt)
+      val ActOrdDF = ActOrd.toDF()
+      ActOrdDF.registerTempTable("Actord_temp")
+      
+      //Assuming tables Actcart_tbl (Active Cart:Schema - Custid,TS,Prodid,Qty) and Ordhist_tbl (Order History:Schema - Custid,Ordid,TS,Prodid,Qty) are already created in Hive
+      
+      ActCartdvalidDF = sqlContext.sql("SELECT Cart.ProdId from Actcart_tbl Cart join Actord_temp Ord on Cart.ProdId = Ord.ProdId and Cart.CustId = Ord.CustId;")
+      
+      OrdHistvalidDF = sqlContext.sql("SELECT ord.ProdID, ord.CustID from Actord_temp Ord join (SELECT ProdID, CustID, OrdId
+      FROM (
+      SELECT ProdID, CustID, OrdId, DENSE_RANK() OVER(Partition by CustId ORDER BY custid ASC, OrdId DESC) As DRANK
+      FROM OrdHist_tbl) A
+      WHERE A.DRANK <= 5) LFORD
+      on LFORD.ProdId = Ord.ProdId and LFORD.CustId = Ord.CustId;")
+      
+      If(ActCartvalidDF.isEmpty() && OrdHistvalidDF.isEmpty()) {
+	  //Code to insert rows into Active cart table
+               sqlContext.sql("Insert into Actcart_tbl select * from Actord_temp;")
+      }else {
+         "Execute the logic to send error message to customer at the time of adding to cart"
+      }
+	} catch {
+      case ex: Exception => logInfo("===========Error Description=============")  
+	}  
+	
+	ssc.start
+    ssc.awaitTermination()
+}
+}
